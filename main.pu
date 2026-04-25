@@ -1,0 +1,135 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import json
+import os
+
+class BookTracker:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Book Tracker — Трекер прочитанных книг")
+        self.root.geometry("800x600")
+        
+        self.books_file = "books_data.json"
+        self.books = self.load_books()
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        """Создание интерфейса"""
+        # Фрейм для формы добавления книги
+        form_frame = ttk.LabelFrame(self.root, text="Добавить книгу", padding=10)
+        form_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Название книги
+        ttk.Label(form_frame, text="Название книги:").grid(row=0, column=0, sticky="w", pady=2)
+        self.title_entry = ttk.Entry(form_frame, width=30)
+        self.title_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+        # Автор
+        ttk.Label(form_frame, text="Автор:").grid(row=1, column=0, sticky="w", pady=2)
+        self.author_entry = ttk.Entry(form_frame, width=30)
+        self.author_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+        # Жанр
+        ttk.Label(form_frame, text="Жанр:").grid(row=2, column=0, sticky="w", pady=2)
+        self.genre_entry = ttk.Entry(form_frame, width=30)
+        self.genre_entry.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+        # Количество страниц
+        ttk.Label(form_frame, text="Количество страниц:").grid(row=3, column=0, sticky="w", pady=2)
+        self.pages_entry = ttk.Entry(form_frame, width=30)
+        self.pages_entry.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+        # Кнопка добавления
+        add_btn = ttk.Button(form_frame, text="Добавить книгу", command=self.add_book)
+        add_btn.grid(row=4, column=0, columnspan=2, pady=10)
+        # Фрейм для фильтров
+        filter_frame = ttk.LabelFrame(self.root, text="Фильтры", padding=10)
+        filter_frame.pack(fill="x", padx=10, pady=5)
+        # Фильтр по жанру
+        ttk.Label(filter_frame, text="Жанр:").grid(row=0, column=0, sticky="w")
+        self.genre_filter = ttk.Combobox(filter_frame, values=["Все", "Роман", "Фантастика", "Детектив", "Биография", "Поэзия"])
+        self.genre_filter.grid(row=0, column=1, padx=5)
+        self.genre_filter.set("Все")
+        # Фильтр по страницам
+        ttk.Label(filter_frame, text="Страниц >:").grid(row=0, column=2, sticky="w", padx=(20, 5))
+        self.pages_filter = ttk.Combobox(filter_frame, values=["Все", "100", "200", "300", "500"])
+        self.pages_filter.grid(row=0, column=3, padx=5)
+        self.pages_filter.set("Все")
+        # Кнопки фильтров
+        apply_filter_btn = ttk.Button(filter_frame, text="Применить фильтр", command=self.apply_filters)
+        apply_filter_btn.grid(row=0, column=4, padx=(20, 5))
+        reset_filter_btn = ttk.Button(filter_frame, text="Сбросить", command=self.reset_filters)
+        reset_filter_btn.grid(row=0, column=5)
+        # Таблица книг
+        table_frame = ttk.LabelFrame(self.root, text="Список книг", padding=10)
+        table_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        columns = ("Название", "Автор", "Жанр", "Страниц")
+        self.books_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=15)
+        for col in columns:
+            self.books_tree.heading(col, text=col)
+            self.books_tree.column(col, width=150)
+        self.books_tree.pack(side="left", fill="both", expand=True)
+        # Полоса прокрутки
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.books_tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.books_tree.configure(yscrollcommand=scrollbar.set)
+        # Кнопки сохранения/загрузки
+        btn_frame = ttk.Frame(self.root)
+        btn_frame.pack(fill="x", padx=10, pady=5)
+        save_btn = ttk.Button(btn_frame, text="Сохранить в JSON", command=self.save_books)
+        save_btn.pack(side="left", padx=5)
+        load_btn = ttk.Button(btn_frame, text="Загрузить из JSON", command=self.load_books_from_file)
+        load_btn.pack(side="left", padx=5)
+        delete_btn = ttk.Button(btn_frame, text="Удалить выбранную", command=self.delete_book)
+        delete_btn.pack(side="left", padx=5)
+        clear_btn = ttk.Button(btn_frame, text="Очистить всё", command=self.clear_all)
+        clear_btn.pack(side="left", padx=5)
+        # Обновление отображения
+        self.update_books_display()
+    def validate_input(self):
+        """Проверка корректности ввода"""
+        title = self.title_entry.get().strip()
+        author = self.author_entry.get().strip()
+        genre = self.genre_entry.get().strip()
+        pages_str = self.pages_entry.get().strip()
+        if not title:
+            messagebox.showerror("Ошибка", "Введите название книги!")
+            return False
+        if not author:
+            messagebox.showerror("Ошибка", "Введите автора книги!")
+            return False
+        if not genre:
+            messagebox.showerror("Ошибка", "Введите жанр книги!")
+            return False
+        try:
+            pages = int(pages_str)
+            if pages <= 0:
+                messagebox.showerror("Ошибка", "Количество страниц должно быть положительным числом!")
+                return False
+        except ValueError:
+            messagebox.showerror("Ошибка", "Количество страниц должно быть числом!")
+            return False
+        return True, title, author, genre, pages
+    def add_book(self):
+        """Добавление книги в список"""
+        validation_result = self.validate_input()
+        if not validation_result[0]:
+            return
+        _, title, author, genre, pages = validation_result
+        book = {
+            "title": title,
+            "author": author,
+            "genre": genre,
+            "pages": pages
+        }
+        self.books.append(book)
+        self.update_books_display()
+        # Очистка полей формы
+        self.title_entry.delete(0, tk.END)
+        self.author_entry.delete(0, tk.END)
+        self.genre_entry.delete(0, tk.END)
+        self.pages_entry.delete(0, tk.END)
+    def update_books_display(self, filtered_books=None):
+        """Обновление отображения книг в таблице"""
+        # Очистка текущей таблицы
+        for item in self.books_tree.get_children():
+            self.books_tree.delete(item)
+        # Отображение книг
+        books_to_display = filtered_books if filtered_
